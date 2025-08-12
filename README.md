@@ -1,6 +1,6 @@
 # 🎵 Video Audio Extraction Tool
 
-A powerful batch video audio extraction tool with support for multiple audio formats, resume functionality, parallel processing, and intelligent adaptive quality.
+A batch video audio extraction tool with support for multiple audio formats, resume functionality, parallel processing, and adaptive quality.
 
 ## ✨ Main Features
 
@@ -31,29 +31,39 @@ A powerful batch video audio extraction tool with support for multiple audio for
 
 ## 🚀 Usage
 
+### 📁 **Where to Place Your Videos**
+
+**Important**: Place your video files in the **project root directory** (same folder as `extract_audio.py`), or in ./original folder
+
 ### Method 1: Using Batch Files (Recommended)
 
-#### Default Configuration (192k + Adaptive)
+#### **Step-by-Step Process:**
+1. **Place video files** in the project root directory
+2. **Double-click to run** one of these batch files:
+   - `extract_audio.bat` - Default 192k + adaptive
+   - `extract_audio_128k.bat` - 128k quality + adaptive  
+   - `extract_audio_320k.bat` - 320k quality + adaptive
+3. **Videos automatically move** to `./original/` folder
+4. **Audio extracted** to `./extracted_audio/` folder
+5. **Completed videos move** to `./original/done/` folder
+
+#### Quick Start:
 ```bash
 # Double-click to run
 extract_audio.bat
 ```
 
-#### 128k Quality + Adaptive
-```bash
-# Double-click to run
-extract_audio_128k.bat
-```
-
-#### 320k Quality + Adaptive
-```bash
-# Double-click to run
-extract_audio_320k.bat
-```
-
 ### Method 2: Command Line
 
-#### Basic Usage
+#### **Step-by-Step Process:**
+1. **Place video files** in the project root directory
+2. **Run command**:
+   ```bash
+   python extract_audio.py --adaptive
+   ```
+3. **Same automatic workflow** as batch files
+
+#### Basic Usage:
 ```bash
 # Default 192k quality + adaptive
 python extract_audio.py --adaptive
@@ -65,7 +75,7 @@ python extract_audio.py -q 128k --adaptive
 python extract_audio.py -q 320k --adaptive
 ```
 
-#### Full Parameters
+#### Full Parameters:
 ```bash
 python extract_audio.py \
     -d ./original \           # Video files directory
