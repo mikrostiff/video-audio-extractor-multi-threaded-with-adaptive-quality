@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug with 128k Adaptive",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/extract_audio_128k.py",
+            "args": ["-q", "128k", "--adaptive"],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Debug with Default 192k",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/extract_audio.py",
+            "args": ["--adaptive"],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Debug with 320k Adaptive",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/extract_audio_320k.py",
+            "args": ["-q", "320k", "--adaptive"],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
