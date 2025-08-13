@@ -18,7 +18,31 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import time
 import signal
 import atexit
+import logging
+import threading
 
+
+# Thread-safe print lock
+print_lock = threading.Lock()
+
+# Monkey patch print function for thread-safe output
+import builtins
+original_print = builtins.print
+
+def safe_print(*args, **kwargs):
+    """Thread-safe print function"""
+    with print_lock:
+        original_print(*args, **kwargs)
+
+# Replace the built-in print with our safe version
+builtins.print = safe_print
+
+# Configure logging for clean, thread-safe output
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(threadName)s] %(message)s',
+    datefmt='%H:%M:%S'
+)
 
 # Global variables for signal handling
 current_record_file = None
@@ -28,7 +52,7 @@ current_record = {}
 def signal_handler(signum, frame):
     """Signal handler to ensure records are saved"""
     if current_record_file and current_record:
-        print(f"\nSaving interrupt record to {current_record_file}...")
+        logging.info(f"\nSaving interrupt record to {current_record_file}...")
         save_extraction_record(current_record_file, current_record)
     sys.exit(0)
 
@@ -81,35 +105,35 @@ def get_video_audio_bitrate(video_path):
         return None
         
     except Exception as e:
-        print(f"Failed to get audio bitrate for {os.path.basename(video_path)}: {e}")
+        logging.info(f"Failed to get audio bitrate for {os.path.basename(video_path)}: {e}")
         return None
 
 
-def get_adaptive_quality(video_path, target_quality, audio_format):
+def get_adaptive_quality(video_path, target_quality, audio_format, worker_id=None, log_message=None):
     """Adaptively set extraction quality based on video audio bitrate"""
-    print(f"Analyzing video: {os.path.basename(video_path)}")
-    print(f"Target quality: {target_quality}, Audio format: {audio_format}")
+    print(f"[Worker {worker_id}] Analyzing video: {os.path.basename(video_path)}")
+    print(f"[Worker {worker_id}] Target quality: {target_quality}, Audio format: {audio_format}")
     
     original_bitrate = get_video_audio_bitrate(video_path)
     
     if original_bitrate is None:
-        print(f"Cannot detect audio bitrate, using target quality: {target_quality}")
+        print(f"[Worker {worker_id}] Cannot detect audio bitrate, using target quality: {target_quality}")
         return target_quality
     
-    print(f"Detected original audio bitrate: {original_bitrate} bps ({original_bitrate//1000}k)")
+    print(f"[Worker {worker_id}] Detected original audio bitrate: {original_bitrate} bps ({original_bitrate//1000}k)")
     
     # Convert target quality to bps
     target_bps = parse_quality_to_bps(target_quality)
     
     if target_bps is None:
-        print(f"Cannot parse target quality '{target_quality}', using target quality")
+        print(f"[Worker {worker_id}] Cannot parse target quality '{target_quality}', using target quality")
         return target_quality
     
-    print(f"Target quality converted to: {target_bps} bps")
+    print(f"[Worker {worker_id}] Target quality converted to: {target_bps} bps")
     
     # If target bitrate is higher than original audio bitrate, use original audio bitrate
     if target_bps > original_bitrate:
-        print(f"Target bitrate {target_bps} bps is higher than original audio bitrate {original_bitrate} bps, will adjust")
+        print(f"[Worker {worker_id}] Target bitrate {target_bps} bps is higher than original audio bitrate {original_bitrate} bps, will adjust")
         
         # Choose appropriate bitrate based on audio format
         if audio_format == 'mp3':
@@ -140,10 +164,10 @@ def get_adaptive_quality(video_path, target_quality, audio_format):
             # Keep original bitrate for other formats
             adaptive_quality = f"{original_bitrate // 1000}k"
         
-        print(f"Adaptive quality adjusted to: {adaptive_quality}")
+        print(f"[Worker {worker_id}] Adaptive quality adjusted to: {adaptive_quality}")
         return adaptive_quality
     else:
-        print(f"Target bitrate {target_bps} bps is appropriate, keeping target quality: {target_quality}")
+        print(f"[Worker {worker_id}] Target bitrate {target_bps} bps is appropriate, keeping target quality: {target_quality}")
         return target_quality
 
 
@@ -181,7 +205,7 @@ def save_extraction_record(record_file, record):
             json.dump(record, f, ensure_ascii=False, indent=2)
             # pass
     except Exception as e:
-        print(f"Failed to save record: {e}")
+        logging.error(f"Failed to save record: {e}")
 
 
 def move_video_files_to_original(video_files, original_dir):
@@ -201,9 +225,9 @@ def move_video_files_to_original(video_files, original_dir):
             try:
                 shutil.move(video_file, new_path)
                 moved_files.append(new_path)
-                print(f"Moved: {filename} -> {original_dir}/")
+                logging.info(f"Moved: {filename} -> {original_dir}/")
             except Exception as e:
-                print(f"Failed to move file {filename}: {e}")
+                logging.info(f"Failed to move file {filename}: {e}")
                 # If move fails, use original path
                 moved_files.append(video_file)
         else:
@@ -213,7 +237,7 @@ def move_video_files_to_original(video_files, original_dir):
     return moved_files
 
 
-def move_completed_file_to_done(video_file, original_dir):
+def move_completed_file_to_done(video_file, original_dir, log_message=None):
     """Move completed video files to original/done folder"""
     try:
         filename = os.path.basename(video_file)
@@ -272,7 +296,7 @@ def extract_audio_from_video_worker(args):
         # If adaptive quality is enabled, get appropriate bitrate
         if use_adaptive:
             print(f"[Worker {worker_id}] Analyzing audio bitrate for {video_name}...")
-            adaptive_quality = get_adaptive_quality(video_path, quality, audio_format)
+            adaptive_quality = get_adaptive_quality(video_path, quality, audio_format, worker_id, None)
             if adaptive_quality != quality:
                 print(f"[Worker {worker_id}] Detected original audio bitrate, adjusting quality: {quality} -> {adaptive_quality}")
             quality = adaptive_quality
@@ -309,7 +333,7 @@ def extract_audio_from_video_worker(args):
         if result.returncode == 0:
             print(f"[Worker {worker_id}] ✓ Successfully extracted: {video_name}")
             # Move file to done folder after successful extraction
-            move_completed_file_to_done(video_path, original_dir)
+            # move_completed_file_to_done(video_path, original_dir, None)
             # Return success status and actual quality used
             return True, (video_name, quality, original_quality)
         else:
@@ -342,7 +366,7 @@ def get_video_files(directory):
     video_files = []
     
     if not os.path.exists(directory):
-        print(f"Directory {directory} does not exist")
+        logging.info(f"Directory {directory} does not exist")
         return []
     
     for file_path in Path(directory).iterdir():
@@ -399,7 +423,7 @@ def main():
         subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
         subprocess.run(['ffprobe', '-version'], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("Error: ffmpeg or ffprobe not found. Please ensure ffmpeg is installed and added to system PATH.")
+        logging.error("Error: ffmpeg or ffprobe not found. Please ensure ffmpeg is installed and added to system PATH.")
         sys.exit(1)
     
     # Ensure original folder exists
@@ -408,16 +432,16 @@ def main():
     # Check if there are video files in root directory, if so move them to original folder
     root_video_files = get_video_files_from_root()
     if root_video_files:
-        print(f"Found {len(root_video_files)} video files in root directory, moving to {args.directory} folder...")
+        logging.info(f"Found {len(root_video_files)} video files in root directory, moving to {args.directory} folder...")
         moved_files = move_video_files_to_original(root_video_files, args.directory)
-        print(f"File move completed!")
+        logging.info(f"File move completed!")
     
     # Get video file list
     video_files = get_video_files(args.directory)
     
     if not video_files:
-        print(f"No video files found in directory {args.directory}")
-        print("Please ensure video files are placed in this directory")
+        logging.error(f"No video files found in directory {args.directory}")
+        logging.error("Please ensure video files are placed in this directory")
         sys.exit(1)
     
     # Create output directory
@@ -455,54 +479,54 @@ def main():
             else:
                 pending_files.append(video_file)
     
-    print(f"Found {len(video_files)} video files:")
-    print(f"  - Completed: {len(completed_files)}")
-    print(f"  - Pending: {len(pending_files)}")
+    logging.info(f"Found {len(video_files)} video files:")
+    logging.info(f"  - Completed: {len(completed_files)}")
+    logging.info(f"  - Pending: {len(pending_files)}")
     
     if completed_files:
-        print("\nCompleted files:")
+        logging.info("\nCompleted files:")
         for video_file in completed_files:
             video_name = os.path.basename(video_file)
             info = current_record.get(video_name, {})
             if info.get('detected') == 'auto':
-                print(f"  ✓ {video_name} (auto-detected)")
+                logging.info(f"  ✓ {video_name} (auto-detected)")
             else:
-                print(f"  ✓ {video_name}")
+                logging.info(f"  ✓ {video_name}")
     
     if pending_files:
-        print("\nPending files:")
+        logging.info("\nPending files:")
         for video_file in pending_files:
             video_name = os.path.basename(video_file)
-            print(f"  - {video_name}")
+            logging.info(f"  - {video_name}")
     
-    print(f"\nAudio will be saved to: {args.output}")
-    print(f"Audio format: {args.format}")
-    print(f"Audio quality: {args.quality}")
+    logging.info(f"\nAudio will be saved to: {args.output}")
+    logging.info(f"Audio format: {args.format}")
+    logging.info(f"Audio quality: {args.quality}")
     
     if args.adaptive:
-        print("Adaptive quality: Enabled (automatically adjust based on original video audio bitrate)")
+        logging.info("Adaptive quality: Enabled (automatically adjust based on original video audio bitrate)")
     else:
-        print("Adaptive quality: Disabled (use fixed quality)")
+        logging.info("Adaptive quality: Disabled (use fixed quality)")
     
     if not args.no_resume:
-        print(f"Resume functionality: Enabled (record file: {record_file})")
-        print("Smart detection: Automatically detect existing audio files")
+        logging.info(f"Resume functionality: Enabled (record file: {record_file})")
+        logging.info("Smart detection: Automatically detect existing audio files")
     else:
-        print("Resume functionality: Disabled")
+        logging.info("Resume functionality: Disabled")
     
     # Determine parallel task count
     if args.sequential:
         max_workers = 1
-        print("Parallel processing: Disabled (sequential mode)")
+        logging.info("Parallel processing: Disabled (sequential mode)")
     else:
         if args.jobs > 0:
             max_workers = args.jobs
         else:
             max_workers = min(multiprocessing.cpu_count(), len(pending_files))
-        print(f"Parallel processing: Enabled (using {max_workers} parallel tasks)")
+        logging.info(f"Parallel processing: Enabled (using {max_workers} parallel tasks)")
     
     if not pending_files:
-        print("\nAll files have been processed!")
+        logging.info("\nAll files have been processed!")
         return
     
     # Confirm whether to continue
@@ -512,7 +536,7 @@ def main():
     #     sys.exit(0)
     
     # Batch extract audio
-    print("\nStarting audio extraction...")
+    logging.info("\nStarting audio extraction...")
     start_time = time.time()
     
     if max_workers == 1:
@@ -521,7 +545,7 @@ def main():
         total_count = len(pending_files)
         
         for i, video_file in enumerate(pending_files, 1):
-            print(f"\n[{i}/{total_count}] ", end="")
+            logging.info(f"\n[{i}/{total_count}] ", end="")
             success, actual_quality = extract_audio_from_video(video_file, args.output, args.format, args.quality, record_file, args.directory, args.adaptive)
             if success:
                 success_count += 1
@@ -573,24 +597,24 @@ def main():
                             }
                             save_extraction_record(record_file, current_record)
                 except Exception as e:
-                    print(f"Task execution exception: {e}")
+                    logging.error(f"Task execution exception: {e}")
     
     # Calculate processing time
     end_time = time.time()
     processing_time = end_time - start_time
     
     # Output result statistics
-    print(f"\n=== Extraction Complete! ===")
-    print(f"This run successful: {success_count}/{total_count}")
-    print(f"Total completed: {len(completed_files) + success_count}/{len(video_files)}")
-    print(f"Processing time: {processing_time:.2f} seconds")
+    logging.info(f"\n=== Extraction Complete! ===")
+    logging.info(f"This run successful: {success_count}/{total_count}")
+    logging.info(f"Total completed: {len(completed_files) + success_count}/{len(video_files)}")
+    logging.info(f"Processing time: {processing_time:.2f} seconds")
     if max_workers > 1:
-        print(f"Average per file: {processing_time/len(pending_files):.2f} seconds")
-    print(f"Audio files saved to: {os.path.abspath(args.output)}")
-    print(f"Completed video files moved to: {os.path.abspath(os.path.join(args.directory, 'done'))}")
+        logging.info(f"Average per file: {processing_time/len(pending_files):.2f} seconds")
+    logging.info(f"Audio files saved to: {os.path.abspath(args.output)}")
+    logging.info(f"Completed video files moved to: {os.path.abspath(os.path.join(args.directory, 'done'))}")
     
     if record_file:
-        print(f"Extraction record saved to: {os.path.abspath(record_file)}")
+        logging.info(f"Extraction record saved to: {os.path.abspath(record_file)}")
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ A batch video audio extraction tool with support for multiple audio formats, res
 ### 🚀 New Features
 - **Adaptive Quality**: Automatically adjust extraction quality based on original video audio bitrate
 - **Automatic File Organization**: Automatically move video files from root directory to specified folders
-- **Completed File Management**: Automatically move files to done folder after processing
+- **Completed File logging**: Automatically log extracted files in json
 - **Smart Bitrate Detection**: Automatically detect video audio bitrate and optimize extraction parameters
 
 ## 🛠️ System Requirements
@@ -45,7 +45,6 @@ A batch video audio extraction tool with support for multiple audio formats, res
    - `extract_audio_320k.bat` - 320k quality + adaptive
 3. **Videos automatically move** to `./original/` folder
 4. **Audio extracted** to `./extracted_audio/` folder
-5. **Completed videos move** to `./original/done/` folder
 
 #### Quick Start:
 ```bash
@@ -117,7 +116,7 @@ python extract_audio.py -q 128k --adaptive
 ### Automatic File Organization
 1. **On Startup**: Automatically detect video files in root directory
 2. **Auto Move**: Move video files to `./original` folder
-3. **After Processing**: Automatically move to `./original/done` folder
+3. **After Processing**: Extracted file in `./extracted_audio` folder
 
 ### Directory Structure
 ```
@@ -128,8 +127,7 @@ Project Root/
 ├── extract_audio_320k.bat    # 320k quality batch file
 ├── original/                 # Video files directory
 │   ├── video1.mp4
-│   ├── video2.avi
-│   └── done/                 # Completed video files
+│   └── video2.avi
 ├── extracted_audio/          # Audio output directory
 │   ├── video1.mp3
 │   └── video2.mp3
